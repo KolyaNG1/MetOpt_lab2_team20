@@ -1,18 +1,24 @@
 \documentclass[aspectratio=169]{beamer}
-\usepackage[utf8]{inputenc}
-\usepackage[T2A]{fontenc}
+\usepackage{fontspec}
 \usepackage[russian]{babel}
+\setsansfont{DejaVu Sans}
+\setmainfont{DejaVu Serif}
+\setmonofont{DejaVu Sans Mono}
 \usepackage{amsmath, amsfonts, amssymb}
 \usepackage{graphicx}
+\usepackage{booktabs}
 \graphicspath{{figures/}}
 \usetheme{Madrid}
 \usecolortheme{default}
 \setbeamertemplate{footline}[frame number]
+\setbeamertemplate{navigation symbols}{}
+\setbeamerfont{itemize/enumerate body}{size=\small}
+\setbeamerfont{itemize/enumerate subbody}{size=\scriptsize}
 
 \title{Лабораторная работа №2}
 \subtitle{Продвинутые методы безусловной оптимизации}
-\author{Команда: Гуров, Громоздин, Гавришок}
-\institute{Пакет 2, трек 4 (Cautious L-BFGS), функция Била}
+\author{Егор Гуров, Александр Громоздин, Николай Гавришок}
+\institute{Пакет 2: Logistic/Poisson + $L_2$, трек 4: Cautious L-BFGS}
 \date{2026}
 
 \begin{document}
@@ -21,58 +27,165 @@
   \titlepage
 \end{frame}
 
-\begin{frame}{Постановка и датасеты}
+\begin{frame}{Задачи лабораторной работы}
   \begin{itemize}
-    \item Сравнение методов 1-го/2-го порядка и L-BFGS на задачах пакета №2.
-    \item Классификация: Logistic Regression + $L_2$; регрессия: Poisson + $L_2$.
-    \item Датасеты: \texttt{phishing} (классификация), \texttt{cadata} (регрессия), \texttt{real-sim} (широкая разреженная матрица, $n \gg m$).
-    \item Исследовательский трек~4: L-BFGS + Wolfe \emph{vs} Cautious L-BFGS + Armijo; на ML — инициализация $x_0 \sim \mathcal{N}(0, 10)$.
+    \item Реализовать линейный CG, нелинейный CG, Hessian-Free Newton и L-BFGS.
+    \item Реализовать \texttt{hess\_vec} для Logistic Regression + $L_2$ и Poisson Regression + $L_2$.
+    \item Проверить \texttt{hess\_vec} через конечные разности.
+    \item Провести обязательные эксперименты 2.2--2.6.
+    \item Выполнить трек 4: Cautious L-BFGS и отказ от Wolfe search.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Эксперименты 2.4 и 2.5: сравнение и микропрофилирование}
-  \vspace{-0.3em}
+\begin{frame}{Эксперимент 2.2: CG против GD}
   \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{center}
-        \includegraphics[width=\linewidth]{exp24_gradnorm_vs_time_phishing}\\
-        \footnotesize 2.4: пример, phishing (градиент / время)
-      \end{center}
+    \begin{column}{0.58\textwidth}
+      \includegraphics[width=\linewidth]{exp22_cg_vs_gd.png}
     \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{center}
-        \includegraphics[width=\linewidth]{exp25_microprofiling}\\
-        \footnotesize 2.5: микропрофилирование (NCG, HFN, L-BFGS)
-      \end{center}
+    \begin{column}{0.38\textwidth}
+      \begin{itemize}
+        \item Тест: квадратичная функция с заданным числом обусловленности $\kappa$.
+        \item CG сильно устойчивее к плохой обусловленности.
+        \item GD при $\kappa=10^4$ упирается в лимит итераций.
+        \item CG в точной арифметике решает SPD-квадратичную задачу не более чем за $n$ шагов.
+      \end{itemize}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Эксперимент 2.6: обучение и обобщение}
-  \begin{center}
-    \includegraphics[height=0.72\textheight]{exp26_train_vs_quality_clf}
-  \end{center}
-  \vspace{-0.5em}
-  {\footnotesize Аналогичный график для регрессии: \texttt{exp26\_train\_vs\_quality\_reg.png}.}
+\begin{frame}{Эксперимент 2.3: размер истории L-BFGS}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \includegraphics[height=0.35\textheight]{exp23_lbfgs_memory_vs_time_classification.png}\par
+      \vspace{0.15em}
+      \includegraphics[height=0.35\textheight]{exp23_lbfgs_final_time_vs_memory_classification.png}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{itemize}
+        \item Память метода: примерно $2Ln$ чисел.
+        \item Стоимость направления: $O(Ln)$.
+        \item На classification плато начинается около $L=20$.
+        \item На regression лучший баланс времени получился около $L=20$.
+        \item Большое $L$ не всегда полезно: итерация становится дороже.
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
-\begin{frame}{Трек 4: вместо Вульфа — Cautious L-BFGS}
-  \begin{itemize}
-    \item Условие ``осторожного'' шага: $\displaystyle \frac{\langle s_k, y_k \rangle}{\lVert s_k \rVert^2} > \varepsilon \lVert \nabla f(x_k) \rVert^\alpha$.
-    \item Ниже — сравнение по времени (ось $Y$ — относит.\ кв.\ нормы градиента) на \textit{phishing} после фиксации $x_0 \sim \mathcal{N}(0, 10)$.
-  \end{itemize}
-  \begin{center}
-    \includegraphics[width=0.72\linewidth]{track4_comparison_ml_phishing}
-  \end{center}
+\begin{frame}{Эксперимент 2.4: методы на ML-задачах}
+  \begin{columns}[T]
+    \begin{column}{0.33\textwidth}
+      \includegraphics[width=\linewidth]{exp24_gradnorm_vs_time_phishing.png}
+      \centering\footnotesize phishing
+    \end{column}
+    \begin{column}{0.33\textwidth}
+      \includegraphics[width=\linewidth]{exp24_gradnorm_vs_time_cadata.png}
+      \centering\footnotesize cadata
+    \end{column}
+    \begin{column}{0.33\textwidth}
+      \includegraphics[width=\linewidth]{exp24_gradnorm_vs_time_real-sim.png}
+      \centering\footnotesize real-sim
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \vspace{0.2em}
+  {\small\begin{itemize}
+    \item HFN лидирует на широком разреженном \textit{real-sim}: 7 итераций и 1.82 с.
+    \item Полный Ньютон лучший на малом \textit{cadata}: 8 итераций и 0.072 с.
+    \item L-BFGS остается универсальным методом без хранения полного гессиана.
+  \end{itemize}}
 \end{frame}
 
-\begin{frame}{Выводы команды}
+\begin{frame}{Эксперимент 2.5: микропрофилирование}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \includegraphics[width=\linewidth]{exp25_microprofiling.png}
+    \end{column}
+    \begin{column}{0.40\textwidth}
+      \begin{table}
+      \centering
+      \scriptsize
+      \begin{tabular}{lccc}
+      \toprule
+      Метод & Оракул & ЛА & ЛП \\
+      \midrule
+      NCG & 0.109 & 0.001 & 0.890 \\
+      HFN & 0.592 & 0.031 & 0.377 \\
+      L-BFGS & 0.261 & 0.037 & 0.702 \\
+      \bottomrule
+      \end{tabular}
+      \end{table}
+      {\small\begin{itemize}
+        \item NCG больше всего тратит на line search.
+        \item HFN больше всего тратит на оракул и \texttt{hess\_vec}.
+      \end{itemize}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Эксперимент 2.6: оптимизация и качество}
+  \begin{columns}[T]
+    \begin{column}{0.58\textwidth}
+      \includegraphics[width=\linewidth]{exp26_train_vs_quality_clf.png}
+    \end{column}
+    \begin{column}{0.38\textwidth}
+      {\small\begin{itemize}
+        \item На phishing Accuracy выходит на плато раньше оптимизационной сходимости.
+        \item Для $\lambda=1/m$ насыщение около 6-й итерации.
+        \item Около 77\% времени после этого почти не улучшает тестовую метрику.
+        \item Практический вывод: нужен early stopping или менее строгая точность.
+      \end{itemize}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Трек 4: Cautious L-BFGS}
+  \[
+    \frac{\langle s_k,y_k\rangle}{\|s_k\|^2} > \varepsilon\|\nabla f(x_k)\|^\alpha,
+    \qquad \varepsilon=10^{-4},\ \alpha=1.
+  \]
   \begin{itemize}
-    \item % TODO: L-BFGS / HFN / время
-    \item % TODO: микропрофилирование: где узкое место
-    \item % TODO: 2.6: плато теста vs train
-    \item % TODO: трек~4: Armijo + cautious vs Wolfe
+    \item Wolfe search заменяется дешевым Armijo backtracking.
+    \item Пара $(s_k,y_k)$ добавляется в историю только при достаточной кривизне.
+    \item Если условие не выполнено, шаг принимается, но история не обновляется.
   \end{itemize}
+\end{frame}
+
+\begin{frame}{Трек 4: результаты на phishing}
+  \begin{columns}[T]
+    \begin{column}{0.58\textwidth}
+      \includegraphics[width=\linewidth]{track4_phishing.png}
+    \end{column}
+    \begin{column}{0.38\textwidth}
+      \begin{table}
+      \centering
+      \scriptsize
+      \begin{tabular}{lcc}
+      \toprule
+      Метод & Вызовы & Время \\
+      \midrule
+      Wolfe & 6.35 & 0.0905 \\
+      Cautious $10^{-4}$ & 5.10 & 0.0615 \\
+      Cautious $10^{-1}$ & 5.12 & 0.0799 \\
+      \bottomrule
+      \end{tabular}
+      \end{table}
+      {\small\begin{itemize}
+        \item При $\varepsilon=10^{-4}$ метод устойчив и быстрее Wolfe.
+        \item При $\varepsilon=10^{-1}$ отброшено 4 пары, но метод сошелся.
+      \end{itemize}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Итоговые выводы}
+  {\small\begin{itemize}
+    \item CG сильно превосходит GD на плохо обусловленных квадратичных задачах.
+    \item Для L-BFGS оптимальный размер истории умеренный: после плато рост $L$ почти не помогает.
+    \item HFN хорош на больших задачах, где полный гессиан строить нельзя, но его цена зависит от числа вызовов \texttt{hess\_vec}.
+    \item Высокая оптимизационная точность не гарантирует улучшения качества на тесте.
+    \item Cautious L-BFGS может заменить Wolfe на Armijo и выиграть по времени, если осторожное условие не отбрасывает почти всю историю.
+  \end{itemize}}
 \end{frame}
 
 \end{document}
